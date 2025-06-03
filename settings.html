@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LingoBook</title>
+</head>
+<body>
+  <h1>Settings</h1>
+  <label for="numberInput">Set a number (10–200):</label><br>
+  <input type="number" id="numberInput" min="10" max="200" step="1" value="50" />
+<p>NOTE: This will ignore review cards. So if you have \n 10 cards saved above, but 12 review cards, you'll \n get 22 cards.</p>
+  <br><br>
+  <button onclick="saveSettings()">Save</button>
+  <button onclick="window.history.back()">Return to Cards</button>
+
+<footer style="margin-top:40px; padding:20px 10px; text-align:center; font-size:14px; color:#555; border-top:1px solid #ccc;">
+  <p>
+    This is a free, forever-available service made with love. If you'd like to support it, tips are always appreciated: 
+    <a href="https://ko-fi.com/imbackbub" target="_blank" style="color:#0066cc;">Buy me a coffee</a>
+  </p>
+  <p>
+    <a href="index.html">Home</a>
+    <a href="about.html">About</a>
+  </p>
+</footer>
+
+  <script>
+    const settingsStorageKey = 'LingoBookSettings';
+    // Load existing setting if available
+    window.onload = function() {
+      const savedValue = localStorage.getItem(settingsStorageKey);
+      if (savedValue !== null && !isNaN(savedValue)) {
+        document.getElementById('numberInput').value = savedValue;
+      }
+    };
+
+    function saveSettings() {
+      const value = parseInt(document.getElementById('numberInput').value, 10);
+      if (value >= 10 && value <= 200) {
+        localStorage.setItem(settingsStorageKey, value);
+        alert("Setting saved!");
+      } else {
+        alert("Please enter a number between 10 and 200.");
+      }
+    }
+  </script>
+</body>
+</html>

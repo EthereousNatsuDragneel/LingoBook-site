@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lingobook</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+    button { margin: 5px; padding: 10px 15px; font-size: 16px; }
+    h1, h2, h3 { margin-bottom: 0.4em; }
+    #remaining { font-weight: bold; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>LingoBook Flashcards</h1>
+  <div id="remaining">Words remaining: ...</div>
+  <p id="apiWord"></p>
+  <div id="apiResult"></div>
+  <div>
+    <button accesskey="e">Easy [E]</button>
+    <button accesskey="m">Medium [M]</button>
+    <button accesskey="h">Hard [H]</button>
+  </div>
+  <div style="margin-top:20px;">
+    <button onclick="goToSettings()">Settings</button>
+    <button onclick="deleteData()">Delete All Progress</button>
+  </div>
+  <div id="timeButtons"></div>
+
+  <footer style="margin-top:40px; padding:20px 10px; text-align:center; font-size:14px; color:#555; border-top:1px solid #ccc;">
+    <p>
+      This is a free, forever-available service made with love. If you'd like to support it, tips are always appreciated:
+      <a href="https://ko-fi.com/imbackbub" target="_blank" style="color:#0066cc;">Buy me a coffee</a>
+    </p>
+    <p>
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+    </p>
+  </footer>
+
+  <script>
+    const TESTING = false;
+    const num_words = { french: 4551, german: 3975, spanish: 5908 };
+    const language = new URLSearchParams(window.location.search).get('lang') || 'default';
+    const storageKey = 'LingoBook_' + language;
+    const settingsStorageKey = 'LingoBookSettings';
+
+    let simulatedToday = new Date();
+
+    function getLocalDateString(dateObj = simulatedToday) {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function modifySimulatedDate(days) {
+      simulatedToday.setDate(simulatedToday.getDate() + days);
+      resetDayIfNeeded();
+      initializeReviewQueue();
+      currentIndex = null;
+      showNextWord();
+    }
+
+    if (TESTING) {
+      const tb = document.getElementById('timeButtons');
+      const tomorrowBtn = document.createElement('button');
+      tomorrowBtn.textContent = 'Tomorrow';
+      tomorrowBtn.onclick = () => modifySimulatedDate(1);
+      const yesterdayBtn = document.createElement('button');
+      yesterdayBtn.textContent = 'Yesterday';
+      yesterdayBtn.onclick = () => modifySimulatedDate(-1);
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Reset';
+      resetBtn.onclick = () => { simulatedToday = new Date(); modifySimulatedDate(0); };
+      tb.appendChild(tomorrowBtn);
+      tb.appendChild(yesterdayBtn);
+      tb.appendChild(resetBtn);
+    }
+
+    let data = JSON.parse(localStorage.getItem(storageKey)) || {
+      review: {},
+      viewed: [],
+      hard: [],
+      day: '',
+      quota_used: 0,
+      hard_today: []
+    };
+
+    let words_left = [];
+    let review_queue = [];
+    let currentIndex = null;
+    let newQuota = parseInt(localStorage.getItem(settingsStorageKey)) || 20;
+
+    function initializeWordsLeft() {
+      words_left = [];
+      for (let i = 0; i < num_words[language]; i++) {
+        if (!data.viewed.includes(i)) words_left.push(i);
+      }
+      if (words_left.length === 0) {
+        for (let i = 0; i < num_words[language]; i++) words_left.push(i);
+      }
+    }
+
+    function updateLocalStorage() {
+      localStorage.setItem(storageKey, JSON.stringify(data));
+    }
+
+    function resetDayIfNeeded() {
+      const today = getLocalDateString();
+      if (data.day !== today) {
+        data.day = today;
+        data.quota_used = 0;
+        const todaysReviews = [];
+        for (const [index, dates] of Object.entries(data.review)) {
+          if (dates.includes(today)) todaysReviews.push(parseInt(index));
+        }
+        data.hard_today = [...data.hard]; // copy hard words to today's loop
+        updateLocalStorage();
+      }
+
+      if (!Array.isArray(data.hard_today)) {
+        data.hard_today = [];
+      }
+    }
+
+    function initializeReviewQueue() {
+      const today = getLocalDateString();
+      review_queue = [];
+      for (const [index, dates] of Object.entries(data.review)) {
+        if (dates.includes(today)) review_queue.push(parseInt(index));
+      }
+    }
+
+    function updateWordsRemainingDisplay() {
+      const remaining = review_queue.length + (newQuota - data.quota_used);
+      document.getElementById('remaining').textContent = `Words remaining: ${remaining}`;
+    }
+
+    function getNextWordIndex() {
+      if (review_queue.length > 0) return review_queue.shift();
+
+      if (data.quota_used < newQuota) {
+        if (words_left.length > 0) {
+          const randIdx = Math.floor(Math.random() * words_left.length);
+          const idx = words_left[randIdx];
+          words_left.splice(randIdx, 1);
+          if (!data.viewed.includes(idx)) data.viewed.push(idx);
+          data.quota_used++;
+          updateLocalStorage();
+          return idx;
+        }
+      }
+
+      if (data.hard_today.length > 0) {
+        const idx = data.hard_today.shift();
+        data.hard_today.push(idx); // rotate hard words endlessly
+        return idx;
+      }
+
+      return null;
+    }
+
+    async function fetchAndDisplayWord(index) {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/word-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lang: language, index })
+        });
+
+        const resultElement = document.getElementById('apiResult');
+        const wordElement = document.getElementById('apiWord');
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          resultElement.textContent = 'API Error: ' + errorData.error;
+          return;
+        }
+
+        const dataResp = await response.json();
+        currentIndex = index;
+
+        wordElement.textContent = dataResp.word || '';
+        resultElement.innerHTML = '';
+
+        if (dataResp.audio) {
+          const audio = document.createElement('audio');
+          audio.src = dataResp.audio;
+          audio.autoplay = true;
+          audio.controls = true;
+          resultElement.appendChild(audio);
+          resultElement.appendChild(document.createElement('br'));
+        }
+
+        const headings = dataResp.headings || [];
+        const contents = dataResp.contents || [];
+
+        for (let i = 0; i < headings.length; i++) {
+          const headingEl = document.createElement('h3');
+          headingEl.textContent = headings[i];
+          resultElement.appendChild(headingEl);
+
+          const para = document.createElement('p');
+          para.innerHTML = (contents[i] || '').replace(/\n/g, '<br>');
+          resultElement.appendChild(para);
+        }
+
+        updateWordsRemainingDisplay();
+      } catch (err) {
+        document.getElementById('apiResult').textContent = 'Fetch failed: ' + err.message;
+      }
+    }
+
+    function handleResponse(difficulty) {
+      if (currentIndex === null) return;
+
+      const today = new Date(simulatedToday);
+      const indexStr = currentIndex.toString();
+      let nextDate = new Date(today);
+      const todayStr = getLocalDateString(today);
+
+      if (difficulty === 5) nextDate.setDate(today.getDate() + 5);
+      else if (difficulty === 2) nextDate.setDate(today.getDate() + 2);
+      else if (difficulty === 0) nextDate.setDate(today.getDate() + 1);
+
+      const nextDateStr = getLocalDateString(nextDate);
+
+      if (difficulty === 5 || difficulty === 2) {
+        data.review[indexStr] = [nextDateStr];
+      } else if (difficulty === 0) {
+        data.review[indexStr] = [todayStr, nextDateStr];
+        if (!data.hard.includes(currentIndex)) data.hard.push(currentIndex);
+        if (!data.hard_today.includes(currentIndex)) data.hard_today.push(currentIndex);
+      }
+
+      updateLocalStorage();
+      showNextWord();
+    }
+
+    function showNextWord() {
+      const nextIdx = getNextWordIndex();
+      if (nextIdx !== null) {
+        fetchAndDisplayWord(nextIdx);
+      } else {
+        document.getElementById('apiWord').textContent = '';
+        document.getElementById('apiResult').textContent = 'Done for today!';
+        updateWordsRemainingDisplay();
+      }
+    }
+
+    function deleteData() {
+      const confirmDelete = confirm("This will delete all data, including all progress, in this language. Do you wish to proceed?");
+      if (confirmDelete) {
+        localStorage.removeItem(storageKey);
+        window.location.reload();
+      }
+    }
+
+    function goToSettings() {
+      window.location.href = "settings.html";
+    }
+
+    resetDayIfNeeded();
+    initializeWordsLeft();
+    initializeReviewQueue();
+    showNextWord();
+
+    document.querySelector('[accesskey="e"]').addEventListener('click', () => handleResponse(5));
+    document.querySelector('[accesskey="m"]').addEventListener('click', () => handleResponse(2));
+    document.querySelector('[accesskey="h"]').addEventListener('click', () => handleResponse(0));
+  </script>
+</body>
+</html>
