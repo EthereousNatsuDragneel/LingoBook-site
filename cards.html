@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-9Y2JZQTD1H"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-9Y2JZQTD1H');
+</script>
   <meta charset="UTF-8">
   <title>Lingobook</title>
   <style>
@@ -13,7 +22,7 @@
 <body>
   <h1>LingoBook Flashcards</h1>
   <div id="remaining">Words remaining: ...</div>
-  <p id="apiWord"></p>
+  <p id="apiWord">The first word may take 1 min to load, but then it'll be faster!</p>
   <div id="apiResult"></div>
   <div>
     <button accesskey="e">Easy [E]</button>
@@ -162,7 +171,7 @@
 
     async function fetchAndDisplayWord(index) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/word-info', {
+        const response = await fetch('https://lingobook-backend.onrender.com/api/word-info', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lang: language, index })
